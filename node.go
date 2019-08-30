@@ -17,7 +17,7 @@ import (
 
 type CfgOpt func(*config.Config)
 
-func spawn(ctx context.Context) (iface.CoreAPI, error) {
+func spawn(ctx context.Context, useExisting bool) (iface.CoreAPI, error) {
 	defaultPath, err := config.PathRoot()
 	if err != nil {
 		// shouldn't be possible
@@ -38,12 +38,14 @@ func spawn(ctx context.Context) (iface.CoreAPI, error) {
 		return nil, fmt.Errorf("error initializing plugins: %s", err)
 	}
 
-	ipfs, err := open(ctx, defaultPath)
-	if err == nil {
-		return ipfs, nil
+	if useExisting {
+		ipfs, err := open(ctx, defaultPath)
+		if err == nil {
+			return ipfs, nil
+		}
 	}
 
-	return tmpNode(ctx, nil)
+	return tmpNode(ctx)
 }
 
 func open(ctx context.Context, repoPath string) (iface.CoreAPI, error) {
@@ -66,31 +68,7 @@ func open(ctx context.Context, repoPath string) (iface.CoreAPI, error) {
 	return coreapi.NewCoreAPI(node)
 }
 
-func temp(ctx context.Context, cfgopts []CfgOpt) (iface.CoreAPI, error) {
-	defaultPath, err := config.PathRoot()
-	if err != nil {
-		// shouldn't be possible
-		return nil, err
-	}
-
-	// Load plugins. This will skip the repo if not available.
-	plugins, err := loader.NewPluginLoader(filepath.Join(defaultPath, "plugins"))
-	if err != nil {
-		return nil, fmt.Errorf("error loading plugins: %s", err)
-	}
-
-	if err := plugins.Initialize(); err != nil {
-		return nil, fmt.Errorf("error initializing plugins: %s", err)
-	}
-
-	if err := plugins.Inject(); err != nil {
-		return nil, fmt.Errorf("error initializing plugins: %s", err)
-	}
-
-	return tmpNode(ctx, cfgopts)
-}
-
-func tmpNode(ctx context.Context, cfgopts []CfgOpt) (iface.CoreAPI, error) {
+func tmpNode(ctx context.Context) (iface.CoreAPI, error) {
 	dir, err := ioutil.TempDir("", "ipfs-shell")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get temp dir: %s", err)
@@ -101,8 +79,12 @@ func tmpNode(ctx context.Context, cfgopts []CfgOpt) (iface.CoreAPI, error) {
 		return nil, err
 	}
 
-	for _, opt := range cfgopts {
-		opt(cfg)
+	// configure the temporary node
+	cfg.Routing.Type = "dhtclient"
+	cfg.Experimental.QUIC = true
+	cfg.Datastore.Spec = map[string]interface{}{
+		"type": "badgerds",
+		"path": "badger",
 	}
 
 	err = fsrepo.Init(dir, cfg)

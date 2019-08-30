@@ -76,22 +76,11 @@ func main() {
 			}
 			fallthrough
 		case "spawn":
-			ipfs, err = spawn(ctx)
+			ipfs, err = spawn(ctx, true)
 		case "local":
 			ipfs, err = http(ctx)
 		case "temp":
-			opts := []CfgOpt{
-				func(cfg *config.Config) {
-					cfg.Routing.Type = "dhtclient"
-				},
-				func(cfg *config.Config) {
-					cfg.Datastore.Spec = map[string]interface{}{
-						"type": "badgerds",
-						"path": "badger",
-					}
-				},
-			}
-			ipfs, err = temp(ctx, opts)
+			ipfs, err = spawn(ctx, false)
 		default:
 			return fmt.Errorf("no such 'node' strategy, %q", c.String("node"))
 		}
